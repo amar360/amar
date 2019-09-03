@@ -1,0 +1,154 @@
+BlueSource runbook
+BlueSource
+BlueSource is Wellmark's Enrollment platform for Small Group, Large Group, and Individual insurance plans.
+
+Data Flow
+BlueSource Data Flow
+BlueSource Data Flow
+BlueSource gets data to display current group demographics, and rates. It also creates enrollment data for Facets, documents for Kovis, and communications sent to members. This briefly describes the many different ways that input and output is created by and for BlueSource.
+
+Networking
+The Bluesource UI resides in AWS and it calls the BlueSource Audience Service API.  The BlueSource Audience Service API calls other enterprise APIs that sit on top of the SRDB.AWS.Wellmark.com Database and access data that way.
+
+API's
+Enterprise Security API
+Production endpoints	https://apigw.wellmark.com/enterprise-event-api/v1/
+Swagger	https://apigw-uat.wellmark.com/enterprise-event-api/v1/docs/
+Other API's	URL	Swagger
+BlueSource (Audience)	https://pubapi.wellmark.com/bs/bluesource/v1	https://svc.aws.wellmark.com/bluesource/v1/docs/
+Consumer API	https://pubapi.wellmark.com/bs/consumer/v1	https://svc.aws.wellmark.com/consumer/v1/docs/
+Contact API	https://pubapi.wellmark.com/bs/contact/v1	https://svc.aws.wellmark.com/contact/v1/docs/
+Document API	https://pubapi.wellmark.com/bs/document/v1	https://svc.aws.wellmark.com/document/v1/docs/
+Event API	https://pubapi.wellmark.com/bs/event/v1	https://svc.aws.wellmark.com/event/v1/docs/
+Producer API	https://pubapi.wellmark.com/bs/producer/v1	https://svc.aws.wellmark.com/producer/v1/docs/
+Products API	https://pubapi.wellmark.com/bs/product/v1	https://svc.aws.wellmark.com/product/v1/docs/
+Quote API	https://pubapi.wellmark.com/bs/quote/v1	https://svc.aws.wellmark.com/quote/v1/docs/
+Enterprise API's
+Wellmark Facets API (WFA)
+Record Retention
+Transaction data stored in srdb database
+
+Environment	DB Location
+PROD	SRDB.PROD.AWS.WELLMARK.COM
+PREP	srdb.prep.aws.wellmark.com
+UAT	srdb.uat.aws.wellmark.com
+SIT	srdb.sit.aws.wellmark.com
+DEV	srdb.dev.aws.wellmark.com
+Batch Processing
+Batch Name	Description	Day & Time Batch is Run	Logs
+Renewals - "sales-renew-get-renewals"	The renewals job is a 2 part process. The get-renewals batch job picks up any small groups in facets that are renewing within the next 90 days, and checks if a renewal has been generated for that group within the previous 90 days. If one hasn't been generated yet, it drops a file for each groupId into an s3 bucket. Each placement of a file into that s3 bucket triggers a lambda to be run on it.	Daily at midnight. Almost all renewals are picked up on the 1st of the month. Job runs daily in case there are changes or retries.	ALM Cloud Watch - https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logStream:group=/aws/lambda/sales-renew-get-renewals
+Renewals = "sales-renew-process-renewals"	This is a lambda that pops off files 1 at a time in the s3 bucket referenced above and generates a renewal for each record. At the end, we write complete or failed for each record in the Event.BatchRenewalEvent table.	not scheduled, but runs 3 processes at a time when the above job drops files to the s3.	
+ALM Cloud Watch - https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logStream:group=/aws/lambda/sales-renew-process-renewals
+Submit Passive Renewals "sales-renew-release-pended"	Similar process to the renewal. On the night of the 20th, this job picks up any renewal that hasn't been submitted by the agent and "Submits" it to bluesource. These are then reviewed and released by Ops team.	monthly on the 20th at 8pm.	ALM Cloud Watch - https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logStream:group=/aws/lambda/sales-renew-release-pended
+Submit Passive Renewals "sales-renew-release-pended-helper"	This is a lambda that pops off files 1 at a time in the s3 bucket referenced above and submits the renewal for each item.	not scheduled, but runs 1 process at a time when the above job drops files to the s3	ALM Cloud Watch - https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logStream:group=/aws/lambda/sales-renew-release-pended-helper
+Reference Data	ETL process by DM that loads reference data from <where> to srdb		ALM Cloud Watch
+Sales-Renew-Facets-Batch-Retry	Re submits transactions with pended status of "Facets Batch Pend". Also, sends a follow-up email that says how many successful renewals were generated on the previous night.	Daily 8a.m.	ALM Cloud Watch - https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#logStream:group=/aws/lambda/sales-renew-facets-batch-retry
+Binder Batch / Retry Batch	Binder Batch and Retry Batch: Runs every weekday (M-F)
+Binder Batch is primarily for the Exchange processing of Empire requests sent to BlueSource with a Binderflg = Y
+
+Retry Batch is for failed events within the event.event table on SRDB.
+
+Binder Batch: 5:45 p.m.
+Retry: 12-1 p.m.
+
+To run the batch process adhoc/immediately especially when the Binder Batch fails to run:
+https://wellmark.visualstudio.com/BTS/_releaseProgress?releaseId=26315&_a=release-pipeline-progress
+
+Security
+Web Security Roles
+Role	Access Level	Role Description	Web Security Role
+Sell Renew Maintain	Permits capabilities to read sell, renew & maintain transactions	SRM_Read
+Book of Business	Write	Permits capabilities to read/write sell, renew & maintain transactions as part of user's book of business	SRM_BOB_Write
+Organization Book of Business	Read	Permits capabilities to read sell, renew & maintain transactions as part of organization users' book of business	SRM_OBOB_Read
+Organization Book of Business	Write	Permits capabilities to read/write sell, renew & maintain transactions as part of organization users' book of business	SRM_OBOB_Write
+Agent of Record	Write	Permits capabilities to read/write agent of record assignment for prospect groups/members	SRM_AOR_Write
+Out of State	Write	Permits capabilities to read/write out of state quote transactions as part of other users' book of business	SRM_OOS_Write
+Designated Security Coordinator	Read	Permits capabilities to read support user delegation transactions	SRM_DSC_Read
+Designated Security Coordinator	Write	Permits capabilities to read/write support user delegation transactions	SRM_DSC_Write
+External Underwriting	Read	Permits capabilities to access undewriting transactions	SRM_EUW_Read
+External Underwriting	Write	Permits capabilities to access undewriting transactions and take appropriate actions	SRM_EUW_Write
+Prospect Group Admin	Read	Permits capabilities to read sell transactions as part of group's enrollment	SRM_PGA_Read
+Prospect Group Admin	Write	Permits capabilities to read/write sell transactions as part of group's enrollment	SRM_PGA_Write
+Producer Firm		Permits capabilities to access sell, renew & maintain transaction as part of firm hierarchy	SRM_PF_[Party Id]
+User Emulation	Write	Permits capabilities to access user emulation capabilities	SRM_UE_Write
+Workflow	Read	Permits capabilities to view workflow items	SRM_WF_Read
+Workflow	Write	Permits capabilities to perform workflow actions	SRM_WF_Write
+Services
+Service Name	GIT Repo	GIT Repo Link	Swagger URL
+Product CRUD Service	product-microservices	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/SG%20Platform%20Team/_git/product-microservices	https://svc.sit.aws.wellmark.com/productmicrosvc/explorer/
+Product Service	product-api	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/SG%20Platform%20Team/_git/product-api	https://svc.sit.aws.wellmark.com/Product/v1/docs/
+Event CRUD Service	Event-microservices	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/SG%20Platform%20Team/_git/event-microservices	https://svc.sit.aws.wellmark.com/eventmicrosvc/explorer/
+Event Service	Event-api	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/SG%20Platform%20Team/_git/event-api	https://svc.sit.aws.wellmark.com/Event/v1/docs/ 
+Consumer CRUD Service	consumer-microservices	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/SG%20Platform%20Team/_git/consumer-microservices	https://svc.sit.aws.wellmark.com/consumermicrosvc/explorer/
+Consumer API	consumer-api	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/SG%20Platform%20Team/_git/consumer-api	https://svc.sit.aws.wellmark.com/consumer/v1/docs/
+Producer CRUD service	Producer-microservices	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/SG%20Platform%20Team/_git/producer-microservices?version=GBdevelopment	https://svc.sit.aws.wellmark.com/producermicrosvc/explorer/
+Producer service	Producer-api	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/SG%20Platform%20Team/_git/producer-api	https://svc.sit.aws.wellmark.com/Producer/v1/
+Wellmark Facets API Service (FXI)	ContractMaintenanceApi	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/_git/ContractMaintenanceAPI?path=%2F&version=GBrelease2.2&_a=contents	
+Contact Service	contact-api	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/SG%20Platform%20Team/_git/contact-api	https://svc.sit.aws.wellmark.com/Contact/v1/docs/
+Contact CRUD Service	contact-microservices	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/SG%20Platform%20Team/_git/contact-microservices	https://svc.sit.aws.wellmark.com/contactmicrosvc/explorer/
+Quote Service	quote-api	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/SG%20Platform%20Team/_git/quote-api	https://svc.sit.aws.wellmark.com/Quote/v1/docs/
+Quote CRUD Service	quote-microservices	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/SG%20Platform%20Team/_git/quote-microservices?version=Gbdevelopment	https://svc.sit.aws.wellmark.com/quotemicrosvc/explorer
+Document Service	Document-API	http://tfs.int.wellmark.com:8080/tfs/DefaultCollection/BTS/SG%20Platform%20Team/_git/document-api	https://svc.sit.aws.wellmark.com/document/v1/docs/ 
+Enrollment Q&A
+BlueSource is able to be dynamic by updating a table in the Consumer database called QuestionAnswer. Each type of business that you are working on (renewals, enrollment, manage business) could have a variation on the fields needed to make the UI meaningful
+
+Below is a summary of these results
+
+QuestionSetName	Summary of contents
+Enrollment Q&A
+numberOfEmployees	Number of employees, Are you a LLC or not
+formated products	Products the group is offering, and has selected
+enrollmentStatus	Complete/incomplete for each section
+Enrollment Questions	5 questions on msp
+Enrollment Products	Same as formatted products, poorly formatted. Used on the backend
+billingContactQuestions	Billing contact questions
+Renewal Q&A
+formated products	Products the group is offering, and has selected
+Renewal Products	
+Renewal Questions	
+renewalStatus	
+Maintenance
+How To
+How To: Farm Bureau Document Upload, Event Insertion KBA00009202
+
+Renewal Support KBA00009203
+
+How To: BlueSource Manage Business Details not Loading Troubleshooting guide
+
+Event Research Help
+
+Cloud Troubleshooting
+
+F12 Information Capture Process
+
+How To: AWS S3 Document Retreival KBA00009301
+
+How To: Identify Who Submitted BlueSource Changes
+
+How To: File:Feature Toggle.docx
+
+Troubleshooting
+Issue Summary	What it is	How to fix	Diagnosis notes
+Dynatrace Response time for API's jumps up in 2 second intervals	DNS issue	Restart DNS Server	I also just made a few GET requests against production and saw the same request sometimes returning in 90ms and sometimes returning in 8s.  The DNS server has a 2 second timeout on it, so we start to see apis resonding with 2/4/6/8/etc seconds fairly consistently.
+Data Released from BlueSource did not get to Facets as expected	Data, API, or Facets issue?		Check SRDB to see if there is a release to Facets, Check the API's with Dyanatrace to see that there is no error at this time, or Check Mongo to review the data sent to WFA (Wellmark Facets API)
+When a group goes through an AOR creating a date break in Facets, Renewal is pulling in the Internal Agent instead of the External Agent so the External Agent is not able to access their renewals.	AOR incorrect	Update AOR with DB Script	Update the script for the Producer key and Consumer key
+the query gets the consumer key and then the producer key which you then give a query to the db admin to run that updates the db
+
+we would only send something like this
+
+SET SQL_SAFE_UPDATES=0;
+
+Update Producer.ProducerConsumerRel
+
+set ProducerKey = 12345
+
+where ConsumerKey = 12345;
+
+Integrations
+DocuSign
+BlueSource will send DocuSign a document for an external user to digitally sign. When the signature is complete, we expect DocuSign to call a BlueSource API to send the document back, and create an event in SRDB
+
+Facets
+BlueSource submits data to Facets with the Wellmark Facets API (WFA). Review data sent to Facets with the Mongo database. BlueSource will retreive data from Facets, especially in the Manage Business screen and Renewal Regeneration.
+
+Data from facets populates the Manage Business module, sourced from the Integrated Data Hub (IDH) batch job
