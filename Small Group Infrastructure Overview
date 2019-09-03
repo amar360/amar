@@ -1,0 +1,82 @@
+Small Group Infrastructure Overview
+The Small Group project was undertaken to provide enrollment and renewal function for small group customers. In support of Wellmark’s cloud strategy, this application was targeted for deployment to AWS.
+
+The application is implemented as an Angular UI supported by API services
+Services use an application-specific database
+Services call ‘legacy’ on-premise services for other functionality (Facets, GMC)
+The enroll/renew functions are generally common and can be shared between individual, small, and mid-size group market segments. Therefore, much of the development for the Small Group project establishes a more general-purpose Distribution Platform for all Wellmark sales & distribution-related functionality.
+
+SmallGroupFrontEnd.png
+Presentation tier Infrastructure
+When a user accesses the site, the browser loads the Angular application files from an S3 bucket via a CloudFront distribution.
+The S3 bucket is configured for encryption, access logging, and allowed access only through an ‘Origin Access Identity’
+A Web Application Firewall (WAF) is applied to CloudFront to provide protection against OWASP-like attacks
+The Angular application calls Wellmark API’s via the AWS API Gateway
+There is another CloudFront distribution in front of the API Gateway to provide country restrictions and DDoS protections.
+The WAF rules are also applied to this distribution
+The API Gateway is configured as a simple proxy, with no intelligent routing
+The Enterprise Security API remains on-premise, and is called via the current Layer 7 API Gateway
+DNS names for the wellmark.com domain are used for the full stack to support SSL encryption.
+bluesource.wellmark.com points to UI CloudFront distribution.
+pubapi.wellmark.com points to services CloudFront distribution.
+apigw.wellmark.com points to Custom Domain Name on API Gateway.
+apilb.wellmark.com points to external ECS application Load balancer.
+CloudFormation Stacks (and TFS Release):
+
+DevSrCloudFront (AwsSrCloudFrontDeployment)
+DevInternalWAF (AwsWafDeployment)
+DevSrApiGateway (AwsApiGateway)
+
+SmallGroupServicesTechStack.png
+Services Infrastructure
+The application generally has public API Services that handle business logic, and private ‘microservices’ that handle database persistence.
+The CloudFront/WAF/API Gateway front-end provides the path to the APIs
+The CloudFront distribution adds a secret header to each request
+The application validates the special	header to ensure the request originated from CloudFront.
+Services are deployed as Docker containers on an ECS cluster behind public and private load balancers.
+Additionally, the request must include a valid JWT which provides authorization details
+APIs are deployed to both the public and private load balancers to support API-to-API calls.
+The load balancers have CNAMES that can be called from Wellmark for testing and troubleshooting
+The green URLs in the diagram are DNS entries maintained on-prem
+TLS/SSL is used throughout the stack and data is encrypted at rest
+CloudFormation Stacks (and TFS Release):
+
+DevSrEcsCluster (AwsSrEcsDeployment)
+DevxxxAPI (que-xxx-aws releases in SG project)
+
+SmallGroupAppTechStack.png
+Application Infrastructure
+Services reads environment secrets from the AWS Parameter store at startup
+The Document API uses an S3 bucket to store documents
+Services read/store data using an Amazon Aurora database cluster with the MySQL engine
+Services use SQS to manage enrollment requests targeted for Facets
+Services call on-premise services to integrate with ‘legacy’ systems and databases
+ECS Task and Service Roles are used to grant proper permissions to the application
+CloudFormation Stacks (and TFS Release):
+
+DevSrRdsCluster (AwsSrRdsDeployment)
+DevSrBase(?)
+DevSrSqs(?)
+
+Deployment Pipelines
+Infrastructure as Code
+
+CloudFormation templates are in CloudEngineering TFS repo
+Common tag and parameter mapping files are pushed to S3 bucket so they can be referenced by templates.
+Some templates rely on exported values from other stacks
+TFS Releases execute the templates via the Deploy role
+Application Code
+
+Code is in BTS TFS repo
+AWS build creates Docker image and pushes to Nexus repo in AWS
+AWS Release uses CloudFormation script to deploy ECS service/task
+PowerShell script updates parameter store variables
+TFS variables are used to manage environment-specific values and secrets
+CF script is in CloudEngineering repo and is dependent on Parameters.json file from the application repo
+Category: Projects
+CONTENTSto top
+Presentation tier Infrastructure
+Services Infrastructure
+Application Infrastructure
+Deployment Pipelines
+Privacy policyAbout inside Technology - WikiDisclaimersLogin / Create Account
