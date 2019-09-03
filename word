@@ -1,0 +1,18 @@
+Platform
+BlueSource is a Cloud Native application. It is deployed in AWS. BlueSource is an Angular front end that reference Node APIs. Here is the initial Small Group Infrastructure Overview.
+The PREP and PROD App and APIs are running in
+•	Hardware/Software: m5.large running Amazon Linux ECS images (Docker 17.12.1-ce)
+•	CPU and Memory: 2 vCPU/8GB RAM
+•	Database: db.r4.large (2 instances in separate availability zones) hosting AWS Aurora MySQL databases.
+•	Load Balancer is set up for PREP and PROD running in 2 instances of each service.
+
+Related Applications
+Post Sale Review
+Managed Communication Service
+DocuSign
+Facets
+Integrated Data Hub (IDH) - Batch Job
+Rate Loading Process - Facets / BlueSource
+
+
+
